@@ -319,3 +319,60 @@ export interface LocalScoreResult {
   categories: PresenceScoreCategory[];
   totalOpportunities: number;
 }
+
+export type ProspectStatus = "NOVO" | "CONTATADO" | "EM_NEGOCIACAO" | "FECHADO";
+
+export interface Prospect {
+  id: string;
+  place_id: string;
+  name: string;
+  category?: string | null;
+  city?: string | null;
+  address?: string | null;
+  formatted_address?: string | null;
+  phone?: string | null;
+  whatsapp_number?: string | null;
+  website?: string | null;
+  has_website: boolean;
+  rating: number;
+  total_reviews: number;
+  reviews_count: number;
+  review_gap_to_leader: number;
+  review_deficit: number;
+  leader_reviews_count: number;
+  status: ProspectStatus;
+  ai_status: string;
+  company_name?: string | null;
+  pitch_generated?: string | null;
+  demo_url?: string | null;
+  instagram?: string | null;
+  notes?: string | null;
+  created_at: string;
+  updated_at?: string | null;
+}
+
+export interface CompetitorItem {
+  place_id: string;
+  name: string;
+  formatted_address: string;
+  rating: number;
+  user_ratings_total: number;
+  formatted_phone_number?: string | null;
+  phone?: string | null;
+  website?: string | null;
+  has_website: boolean;
+  photos?: string[];
+  photo_url?: string | null;
+  photo_reference?: string | null;
+  instagram?: string | null;
+  deficit: number;
+}
+
+export interface BenchmarkMetrics {
+  totalCompetitors: number;
+  withoutWebsiteCount: number;
+  avgRating: number;
+  avgReviews: number;
+  marketLeader: CompetitorItem | null;
+}
+

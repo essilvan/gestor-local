@@ -15,10 +15,13 @@ export async function middleware(request: NextRequest) {
   const hostname = rawHostname.toLowerCase();
   const hostWithoutPort = hostname.split(":")[0];
 
-  // 1. Ignorar arquivos estáticos, rotas internas do Next.js e extensões de arquivo
+  // 1. Ignorar arquivos estáticos, rotas internas do Next.js, API e dashboard do Gestor Local
   if (
+    url.pathname === "/" ||
     url.pathname.startsWith("/_next") ||
     url.pathname.startsWith("/api") ||
+    url.pathname.startsWith("/comparativo") ||
+    url.pathname.startsWith("/prospeccao") ||
     url.pathname.includes(".")
   ) {
     return NextResponse.next();
@@ -78,9 +81,13 @@ export async function middleware(request: NextRequest) {
 
   // 3. Rotas do sistema que nunca devem sofrer rewrite de subdomínio
   const isSystemRoute =
+    url.pathname === "/" ||
     url.pathname.startsWith("/login") ||
     url.pathname.startsWith("/register") ||
-    url.pathname.startsWith("/diagnostico");
+    url.pathname.startsWith("/diagnostico") ||
+    url.pathname.startsWith("/comparativo") ||
+    url.pathname.startsWith("/prospeccao") ||
+    url.pathname.startsWith("/api");
 
   if (isSystemRoute) {
     return NextResponse.next();
@@ -125,7 +132,9 @@ export async function middleware(request: NextRequest) {
     slug !== "www" &&
     slug !== "local" &&
     slug !== "admin" &&
-    slug !== "super-admin"
+    slug !== "super-admin" &&
+    slug !== "comparativo" &&
+    slug !== "prospeccao"
   ) {
     if (!url.pathname.startsWith(`/${slug}`)) {
       const rewriteUrl = new URL(
@@ -149,10 +158,11 @@ export const config = {
     /*
      * Aplica o middleware em todas as rotas exceto:
      * - api (rotas de API)
+     * - comparativo, prospeccao (dashboard Gestor Local)
      * - _next/static (arquivos estáticos JS/CSS)
      * - _next/image (otimização de imagens)
      * - favicon.ico, robots.txt, sitemap.xml
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
+    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|comparativo|prospeccao).*)",
   ],
 };

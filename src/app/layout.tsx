@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "@/styles/globals.css";
 
 export const metadata: Metadata = {
-  title: "EssMendes Local | Presença Digital para Negócios Locais",
+  title: "Gestorlocal | prospector",
   description:
     "Plataforma de presença digital, catálogo de serviços e geração de clientes para negócios locais.",
 };

@@ -23,6 +23,13 @@ export async function generateMetadata({
   params,
 }: PublicPageProps): Promise<Metadata> {
   const { slug } = await params;
+
+  if (["comparativo", "prospeccao", "api", "admin", "login"].includes(slug)) {
+    return {
+      title: "Página Não Encontrada",
+    };
+  }
+
   const supabase = await createClient();
 
   const { data: tenant } = await supabase
@@ -147,6 +154,11 @@ export async function generateMetadata({
 export default async function PublicTenantPage({ params }: PublicPageProps) {
   const { slug } = await params;
   const cleanSlug = typeof slug === "string" ? slug.trim() : slug;
+
+  if (["comparativo", "prospeccao", "api", "admin", "login"].includes(cleanSlug)) {
+    notFound();
+  }
+
   const supabase = await createClient();
 
   // 2.1 Busca o tenant pelo slug selecionando todas as colunas

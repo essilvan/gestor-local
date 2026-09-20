@@ -22,6 +22,7 @@ import {
   Search,
 } from "lucide-react";
 import { generateSalesPitch } from "@/lib/sales-pitch";
+import { LogoutButton } from "@/components/ui/LogoutButton";
 import type { Prospect, ProspectStatus } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -172,6 +173,8 @@ export default async function RootDashboardPage() {
               <Kanban className="w-3.5 h-3.5 text-emerald-400" />
               <span>Funil CRM</span>
             </Link>
+
+            <LogoutButton />
           </div>
         </div>
       </header>

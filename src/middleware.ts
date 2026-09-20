@@ -3,97 +3,127 @@ import { createServerClient } from "@supabase/ssr";
 
 /**
  * Middleware do EssMendes Local:
- * 1. Protege rotas administrativas (/admin e /super-admin) com autenticação Supabase
- * 2. Faz o roteamento transparente de subdomínios multi-tenant:
- *    - oficina-do-joao.essmendes.com.br -> /[slug]
- *    - oficina-do-joao.localhost:3000 -> /[slug]
- * 3. Preserva domínio principal, preview no Vercel e rotas do sistema
+ * 1. Permite caminhos públicos sem autenticação: /login, _next, favicon.ico, arquivos estáticos e imagens públicas
+ * 2. Protege rotas do sistema com Supabase Auth: /, /prospeccao, /comparativo, /admin, /super-admin
+ * 3. Se usuário não autenticado tentar acessar rota protegida: redireciona para /login?redirect=${pathname}
+ * 4. Se usuário autenticado tentar acessar /login: redireciona direto para /prospeccao
+ * 5. Mantém o roteamento transparente de subdomínios multi-tenant para vitrines públicas /[slug]
  */
 export async function middleware(request: NextRequest) {
   const url = request.nextUrl;
+  const pathname = url.pathname;
   const rawHostname = request.headers.get("host") || "";
   const hostname = rawHostname.toLowerCase();
   const hostWithoutPort = hostname.split(":")[0];
 
-  // 1. Ignorar arquivos estáticos, rotas internas do Next.js, API e dashboard do Gestor Local
+  // 1. Arquivos estáticos, rotas internas do Next.js, favicon e imagens públicas
   if (
-    url.pathname === "/" ||
-    url.pathname.startsWith("/_next") ||
-    url.pathname.startsWith("/api") ||
-    url.pathname.startsWith("/comparativo") ||
-    url.pathname.startsWith("/prospeccao") ||
-    url.pathname.includes(".")
+    pathname.startsWith("/_next") ||
+    pathname.startsWith("/images") ||
+    pathname === "/favicon.ico" ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml" ||
+    /\.(png|jpe?g|gif|svg|ico|webp|css|js|map|woff2?|ttf|eot)$/i.test(pathname)
   ) {
     return NextResponse.next();
   }
 
-  // 2. Proteção de Autenticação para /admin e /super-admin
-  if (url.pathname.startsWith("/super-admin") || url.pathname.startsWith("/admin")) {
-    const requestHeaders = new Headers(request.headers);
-    requestHeaders.set("x-pathname", url.pathname);
+  // 2. Criação do cliente Supabase SSR no middleware com sincronização de cookies
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set("x-pathname", pathname);
 
-    let response = NextResponse.next({
-      request: {
-        headers: requestHeaders,
+  let response = NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
+
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  let user = null;
+
+  if (supabaseUrl && supabaseAnonKey) {
+    const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+      cookies: {
+        getAll() {
+          return request.cookies.getAll();
+        },
+        setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
+          cookiesToSet.forEach(({ name, value }) =>
+            request.cookies.set(name, value)
+          );
+          response = NextResponse.next({
+            request: {
+              headers: requestHeaders,
+            },
+          });
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
       },
     });
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-    if (supabaseUrl && supabaseAnonKey) {
-      const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
-        cookies: {
-          getAll() {
-            return request.cookies.getAll();
-          },
-          setAll(cookiesToSet: Array<{ name: string; value: string; options?: any }>) {
-            cookiesToSet.forEach(({ name, value }: { name: string; value: string }) =>
-              request.cookies.set(name, value)
-            );
-            response = NextResponse.next({
-              request: {
-                headers: requestHeaders,
-              },
-            });
-            cookiesToSet.forEach(
-              ({ name, value, options }: { name: string; value: string; options?: any }) =>
-                response.cookies.set(name, value, options)
-            );
-          },
-        },
-      });
-
+    try {
+      // Uso de getUser() para validação criptográfica confiável de token no servidor
       const {
-        data: { user },
+        data: { user: authUser },
       } = await supabase.auth.getUser();
-
-      // Se não autenticado, redireciona para login com parâmetro de retorno
-      if (!user) {
-        const loginUrl = new URL("/login", request.url);
-        loginUrl.searchParams.set("redirect", url.pathname);
-        return NextResponse.redirect(loginUrl);
-      }
+      user = authUser;
+    } catch (err) {
+      console.error("[Middleware] Erro ao validar sessão Supabase:", err);
+      user = null;
     }
+  }
 
+  // Helper para preservar cookies do Supabase em redirects
+  const createRedirectResponse = (targetUrl: URL) => {
+    const redirectRes = NextResponse.redirect(targetUrl);
+    response.cookies.getAll().forEach((cookie) => {
+      redirectRes.cookies.set(cookie.name, cookie.value);
+    });
+    return redirectRes;
+  };
+
+  // 3. Regra: Se usuário AUTENTICADO tentar acessar /login, redireciona para /prospeccao
+  if (pathname === "/login" || pathname.startsWith("/login/")) {
+    if (user) {
+      const targetUrl = new URL("/prospeccao", request.url);
+      return createRedirectResponse(targetUrl);
+    }
     return response;
   }
 
-  // 3. Rotas do sistema que nunca devem sofrer rewrite de subdomínio
-  const isSystemRoute =
-    url.pathname === "/" ||
-    url.pathname.startsWith("/login") ||
-    url.pathname.startsWith("/register") ||
-    url.pathname.startsWith("/diagnostico") ||
-    url.pathname.startsWith("/comparativo") ||
-    url.pathname.startsWith("/prospeccao") ||
-    url.pathname.startsWith("/api");
-
-  if (isSystemRoute) {
-    return NextResponse.next();
+  // 4. Rotas de API mantêm autonomia de autenticação para evitar loops HTML em JSON/Webhooks
+  if (pathname.startsWith("/api")) {
+    return response;
   }
 
-  // 4. Verificação de Domínio Raiz / Aplicação Principal
+  // 5. Rotas públicas adicionais
+  if (pathname.startsWith("/register") || pathname.startsWith("/diagnostico")) {
+    return response;
+  }
+
+  // 6. Proteção das rotas da aplicação: /, /prospeccao, /comparativo, /admin, /super-admin
+  const isProtectedRoute =
+    pathname === "/" ||
+    pathname.startsWith("/prospeccao") ||
+    pathname.startsWith("/comparativo") ||
+    pathname.startsWith("/admin") ||
+    pathname.startsWith("/super-admin");
+
+  if (isProtectedRoute) {
+    if (!user) {
+      const loginUrl = new URL("/login", request.url);
+      const fullPath = `${pathname}${url.search || ""}`;
+      loginUrl.searchParams.set("redirect", fullPath);
+      return createRedirectResponse(loginUrl);
+    }
+    return response;
+  }
+
+  // 7. Roteamento de Subdomínios Multi-Tenant para Vitrines Públicas de Clientes (/[slug])
   const isRootDomain =
     hostWithoutPort === "essmendes.com.br" ||
     hostWithoutPort === "www.essmendes.com.br" ||
@@ -104,19 +134,16 @@ export async function middleware(request: NextRequest) {
     hostWithoutPort.endsWith(".vercel.app");
 
   if (isRootDomain) {
-    return NextResponse.next();
+    return response;
   }
 
-  // 5. Extração do subdomínio (slug do cliente)
-  // Exemplo 1: "oficina-do-joao.essmendes.com.br" -> slug: "oficina-do-joao"
-  // Exemplo 2 (local): "oficina-do-joao.localhost:3000" -> slug: "oficina-do-joao"
+  // Extração do subdomínio de cliente
   let slug = "";
   if (hostWithoutPort.endsWith(".localhost")) {
     slug = hostWithoutPort.replace(".localhost", "");
   } else if (hostWithoutPort.endsWith(".essmendes.com.br")) {
     slug = hostWithoutPort.replace(".essmendes.com.br", "");
   } else {
-    // Fallback caso venha com porta ou formato alternativo
     let currentHost = hostname.replace(/:\d+$/, "");
     if (currentHost.includes(".essmendes.com.br")) {
       slug = currentHost.replace(".essmendes.com.br", "");
@@ -125,44 +152,47 @@ export async function middleware(request: NextRequest) {
 
   slug = slug.trim();
 
-  // 6. Se encontrou um subdomínio válido de cliente, reescreve a rota internamente para /[slug]
-  if (
-    slug &&
-    slug !== "app" &&
-    slug !== "www" &&
-    slug !== "local" &&
-    slug !== "admin" &&
-    slug !== "super-admin" &&
-    slug !== "comparativo" &&
-    slug !== "prospeccao"
-  ) {
-    if (!url.pathname.startsWith(`/${slug}`)) {
+  // Se subdomínio for válido e não reservado, reescreve internamente para /[slug]
+  const reservedSlugs = [
+    "app",
+    "www",
+    "local",
+    "admin",
+    "super-admin",
+    "comparativo",
+    "prospeccao",
+    "login",
+    "register",
+    "diagnostico",
+    "api",
+  ];
+
+  if (slug && !reservedSlugs.includes(slug)) {
+    if (!pathname.startsWith(`/${slug}`)) {
       const rewriteUrl = new URL(
-        `/${slug}${url.pathname === "/" ? "" : url.pathname}`,
+        `/${slug}${pathname === "/" ? "" : pathname}`,
         request.url
       );
       rewriteUrl.search = url.search;
       return NextResponse.rewrite(rewriteUrl, {
         request: {
-          headers: request.headers,
+          headers: requestHeaders,
         },
       });
     }
   }
 
-  return NextResponse.next();
+  return response;
 }
 
 export const config = {
   matcher: [
     /*
-     * Aplica o middleware em todas as rotas exceto:
-     * - api (rotas de API)
-     * - comparativo, prospeccao (dashboard Gestor Local)
+     * Aplica o middleware em todas as rotas da aplicação, exceto:
      * - _next/static (arquivos estáticos JS/CSS)
      * - _next/image (otimização de imagens)
      * - favicon.ico, robots.txt, sitemap.xml
      */
-    "/((?!api|_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml|comparativo|prospeccao).*)",
+    "/((?!_next/static|_next/image|favicon.ico|robots.txt|sitemap.xml).*)",
   ],
 };

@@ -38,6 +38,7 @@ import {
   updateProspectInstagramAction,
 } from "@/services/prospects.actions";
 import { InstagramIcon } from "@/components/ui/InstagramIcon";
+import { LogoutButton } from "@/components/ui/LogoutButton";
 import { sanitizeInstagramHandle } from "@/lib/instagram";
 import {
   generateSalesPitch,
@@ -317,6 +318,8 @@ export default function ProspeccaoPage() {
               <Building2 className="w-3.5 h-3.5" />
               <span>Admin</span>
             </Link>
+
+            <LogoutButton />
           </div>
         </div>
       </header>

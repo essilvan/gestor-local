@@ -31,6 +31,7 @@ import {
 import { ComparisonCardExport } from "@/components/ComparisonCardExport";
 import { saveProspectsAction } from "@/services/prospects.actions";
 import { InstagramIcon } from "@/components/ui/InstagramIcon";
+import { LogoutButton } from "@/components/ui/LogoutButton";
 import { sanitizeInstagramHandle } from "@/lib/instagram";
 import { generateSalesPitch } from "@/lib/sales-pitch";
 import type { CompetitorItem, BenchmarkMetrics } from "@/types";
@@ -370,6 +371,8 @@ export default function ComparativoPage() {
               <Building2 className="w-3.5 h-3.5" />
               <span>Admin</span>
             </Link>
+
+            <LogoutButton />
           </div>
         </div>
       </header>

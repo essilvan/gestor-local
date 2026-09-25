@@ -53,131 +53,90 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Consulta ao Text Search do Google Places com loop de paginação (3 páginas = até 60 resultados)
-    const allResults: any[] = [];
+    // 1. Consulta via Google Places API (New) places:searchText com paginação de até 3 ciclos (até 60 leads)
+    const allPlaces: any[] = [];
+    let isV1Success = false;
 
-    // Página 1
-    const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
-      `${cleanQuery} em ${cleanCity}`
-    )}&language=pt-BR&key=${apiKey}`;
+    try {
+      let pageToken: string | null = null;
+      let cycle = 0;
 
-    const textSearchRes = await fetch(textSearchUrl, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      cache: "no-store",
-    });
+      do {
+        cycle++;
+        const requestBody: Record<string, any> = {
+          textQuery: `${cleanQuery} em ${cleanCity}`,
+          pageSize: 20,
+        };
+        if (pageToken) {
+          requestBody.pageToken = pageToken;
+        }
 
-    if (!textSearchRes.ok) {
-      return NextResponse.json(
-        {
-          success: false,
-          error: `Erro ao conectar com Google Places API: HTTP ${textSearchRes.status}`,
-        },
-        { status: textSearchRes.status }
-      );
-    }
+        const v1Res = await fetch("https://places.googleapis.com/v1/places:searchText", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": apiKey,
+            "X-Goog-FieldMask":
+              "places.id,places.displayName,places.formattedAddress,places.rating,places.userRatingCount,places.websiteUri,places.nationalPhoneNumber,places.internationalPhoneNumber,places.photos,nextPageToken",
+          },
+          body: JSON.stringify(requestBody),
+          cache: "no-store",
+        });
 
-    const textSearchData = await textSearchRes.json();
-
-    if (textSearchData.status !== "OK" && textSearchData.status !== "ZERO_RESULTS") {
-      return NextResponse.json(
-        {
-          success: false,
-          error:
-            textSearchData.error_message ||
-            `Google Places retornou status: ${textSearchData.status}`,
-        },
-        { status: 400 }
-      );
-    }
-
-    if (Array.isArray(textSearchData.results)) {
-      allResults.push(...textSearchData.results);
-    }
-
-    // Página 2 (se next_page_token existir)
-    let nextPageToken: string | null =
-      textSearchData.next_page_token || textSearchData.nextPageToken || null;
-
-    if (nextPageToken) {
-      // Google Places requer delay de 2000ms para next_page_token ficar ativo
-      await new Promise((r) => setTimeout(r, 2000));
-
-      let page2Data: any = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const page2Url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(
-            nextPageToken
-          )}&key=${apiKey}`;
-
-          const page2Res = await fetch(page2Url, {
-            method: "GET",
-            headers: { Accept: "application/json" },
-            cache: "no-store",
-          });
-
-          if (page2Res.ok) {
-            page2Data = await page2Res.json();
-            if (page2Data.status === "OK") break;
-            if (page2Data.status === "INVALID_REQUEST" && attempt === 0) {
-              await new Promise((r) => setTimeout(r, 1500));
-              continue;
-            }
+        if (v1Res.ok) {
+          const v1Data = await v1Res.json();
+          if (Array.isArray(v1Data.places) && v1Data.places.length > 0) {
+            allPlaces.push(...v1Data.places);
+            isV1Success = true;
           }
-        } catch (err) {
-          console.error("[places/benchmark] Falha ao consultar página 2:", err);
+          pageToken = v1Data.nextPageToken || null;
+        } else {
+          console.warn(`[places/benchmark] v1 searchText retornou HTTP ${v1Res.status}`);
+          pageToken = null;
+        }
+      } while (pageToken && cycle < 3);
+    } catch (v1Err) {
+      console.error("[places/benchmark] Falha ao consultar Places API (New):", v1Err);
+    }
+
+    // Fallback para Google Places Legacy Text Search se a v1 não retornar estabelecimentos
+    if (!isV1Success || allPlaces.length === 0) {
+      console.log("[places/benchmark] Ativando fallback para Legacy Text Search...");
+      let nextPageToken: string | null = null;
+      let attempts = 0;
+
+      const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
+        `${cleanQuery} em ${cleanCity}`
+      )}&key=${apiKey}`;
+
+      const response = await fetch(url, { cache: "no-store" });
+      const data = await response.json();
+      if (Array.isArray(data.results)) {
+        allPlaces.push(...data.results);
+      }
+      nextPageToken = data.next_page_token || null;
+
+      while (nextPageToken && attempts < 2) {
+        attempts++;
+        await new Promise((resolve) => setTimeout(resolve, 2100));
+        const pageUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${nextPageToken}&key=${apiKey}`;
+        const pageRes = await fetch(pageUrl, { cache: "no-store" });
+        const pageData = await pageRes.json();
+        if (pageData.results && pageData.results.length > 0) {
+          allPlaces.push(...pageData.results);
+          nextPageToken = pageData.next_page_token || null;
+        } else {
+          nextPageToken = null;
         }
       }
-
-      if (page2Data?.status === "OK" && Array.isArray(page2Data.results)) {
-        allResults.push(...page2Data.results);
-        nextPageToken = page2Data.next_page_token || page2Data.nextPageToken || null;
-      } else {
-        nextPageToken = null;
-      }
     }
 
-    // Página 3 (se segundo next_page_token existir)
-    if (nextPageToken) {
-      // Google Places requer delay de 2000ms novamente
-      await new Promise((r) => setTimeout(r, 2000));
-
-      let page3Data: any = null;
-      for (let attempt = 0; attempt < 2; attempt++) {
-        try {
-          const page3Url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(
-            nextPageToken
-          )}&key=${apiKey}`;
-
-          const page3Res = await fetch(page3Url, {
-            method: "GET",
-            headers: { Accept: "application/json" },
-            cache: "no-store",
-          });
-
-          if (page3Res.ok) {
-            page3Data = await page3Res.json();
-            if (page3Data.status === "OK") break;
-            if (page3Data.status === "INVALID_REQUEST" && attempt === 0) {
-              await new Promise((r) => setTimeout(r, 1500));
-              continue;
-            }
-          }
-        } catch (err) {
-          console.error("[places/benchmark] Falha ao consultar página 3:", err);
-        }
-      }
-
-      if (page3Data?.status === "OK" && Array.isArray(page3Data.results)) {
-        allResults.push(...page3Data.results);
-      }
-    }
-
-    // Concatena e deduplica todos os lugares por place_id
+    // 2. Concatena e deduplica todos os lugares por ID
     const uniqueMap = new Map<string, any>();
-    for (const item of allResults) {
-      if (item && item.place_id && !uniqueMap.has(item.place_id)) {
-        uniqueMap.set(item.place_id, item);
+    for (const item of allPlaces) {
+      const placeId = item?.id || item?.place_id;
+      if (placeId && !uniqueMap.has(placeId)) {
+        uniqueMap.set(placeId, item);
       }
     }
     const rawResults: any[] = Array.from(uniqueMap.values());
@@ -198,89 +157,55 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. Busca detalhes completos para todos os lugares encontrados (50+ concorrentes)
-    const detailsTasks = rawResults.map((item) => async () => {
-      if (!item.place_id) {
-        return null;
-      }
-
-      try {
-        const detailsUrl = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(
-          item.place_id
-        )}&fields=name,formatted_address,rating,user_ratings_total,formatted_phone_number,website,photos&language=pt-BR&key=${apiKey}`;
-
-        const detailsRes = await fetch(detailsUrl, {
-          method: "GET",
-          headers: { Accept: "application/json" },
-          cache: "no-store",
-        });
-
-        if (!detailsRes.ok) {
-          return null;
-        }
-
-        const detailsData = await detailsRes.json();
-        return detailsData.status === "OK" ? detailsData.result : null;
-      } catch (err) {
-        console.error(`[places/benchmark] Falha ao obter detalhes de ${item.place_id}:`, err);
-        return null;
-      }
-    });
-
-    const CONCURRENCY = 12;
-    const settledDetails: any[] = new Array(rawResults.length);
-    let taskIndex = 0;
-    const workers = new Array(Math.min(CONCURRENCY, rawResults.length)).fill(0).map(async () => {
-      while (taskIndex < rawResults.length) {
-        const i = taskIndex++;
-        settledDetails[i] = await detailsTasks[i]();
-      }
-    });
-    await Promise.all(workers);
-
-    // 3. Monta todos os concorrentes combinando dados da busca e detalhes
-    const competitors: CompetitorItem[] = rawResults.map((item, index) => {
-      const details = settledDetails[index] || {};
-
-      const name = details.name || item.name || "Empresa Sem Nome";
+    // 3. Monta todos os concorrentes combinando dados (compatível com New v1 e Legacy)
+    const competitors: CompetitorItem[] = rawResults.map((item) => {
+      const placeId = item.id || item.place_id;
+      const name =
+        item.displayName?.text ||
+        item.name ||
+        "Empresa Sem Nome";
       const formatted_address =
-        details.formatted_address || item.formatted_address || "";
+        item.formattedAddress ||
+        item.formatted_address ||
+        "";
       const rating =
-        typeof details.rating === "number"
-          ? details.rating
-          : typeof item.rating === "number"
+        typeof item.rating === "number"
           ? item.rating
           : 0;
       const user_ratings_total =
-        typeof details.user_ratings_total === "number"
-          ? details.user_ratings_total
+        typeof item.userRatingCount === "number"
+          ? item.userRatingCount
           : typeof item.user_ratings_total === "number"
           ? item.user_ratings_total
           : 0;
       const formatted_phone_number =
-        details.formatted_phone_number || item.formatted_phone_number || null;
-      const website = details.website || item.website || null;
+        item.nationalPhoneNumber ||
+        item.internationalPhoneNumber ||
+        item.formatted_phone_number ||
+        null;
+      const website = item.websiteUri || item.website || null;
       const has_website = Boolean(website && website.trim().length > 0);
       const instagram = extractInstagramHandle(website);
 
       const photos: string[] = [];
       let photo_reference: string | null = null;
-      const rawPhotos = details.photos || item.photos;
+      const rawPhotos = item.photos;
       if (Array.isArray(rawPhotos) && rawPhotos.length > 0) {
         const firstPhoto = rawPhotos[0];
-        if (firstPhoto?.photo_reference) {
-          photo_reference = firstPhoto.photo_reference;
+        const firstPhotoRef = firstPhoto?.name || firstPhoto?.photo_reference;
+        if (firstPhotoRef) {
+          photo_reference = firstPhotoRef;
         }
         for (const photo of rawPhotos.slice(0, 3)) {
-          if (photo.photo_reference) {
-            // Serve via proxy seguro para evitar contaminação de canvas (CORS) no html-to-image
-            photos.push(`/api/places/photo?ref=${encodeURIComponent(photo.photo_reference)}`);
+          const ref = photo.name || photo.photo_reference;
+          if (ref) {
+            photos.push(`/api/places/photo?ref=${encodeURIComponent(ref)}`);
           }
         }
       }
 
       return {
-        place_id: item.place_id,
+        place_id: placeId,
         name,
         formatted_address,
         rating,
@@ -293,7 +218,7 @@ export async function POST(request: Request) {
         photo_url: photos[0] || null,
         photo_reference,
         instagram,
-        deficit: 0, // calculado após ordenação
+        deficit: 0,
       };
     });
 

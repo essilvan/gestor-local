@@ -19,9 +19,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const photoUrl = `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${encodeURIComponent(
-      ref
-    )}&key=${apiKey}`;
+    const photoUrl = ref.startsWith("places/")
+      ? `https://places.googleapis.com/v1/${ref}/media?maxHeightPx=800&maxWidthPx=800&key=${apiKey}`
+      : `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${encodeURIComponent(
+          ref
+        )}&key=${apiKey}`;
 
     const res = await fetch(photoUrl, {
       redirect: "follow",

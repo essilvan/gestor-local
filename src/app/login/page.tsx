@@ -3,7 +3,6 @@
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Image from "next/image";
-import Link from "next/link";
 import {
   Mail,
   Lock,
@@ -15,6 +14,11 @@ import {
   ShieldCheck,
   ArrowRight,
   Check,
+  CheckCircle2,
+  X,
+  User,
+  Phone,
+  Send,
 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
@@ -29,6 +33,91 @@ function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Estados para modal de solicitação de credenciais (FormSubmit)
+  const [isRequestModalOpen, setIsRequestModalOpen] = useState(false);
+  const [reqNome, setReqNome] = useState("");
+  const [reqEmail, setReqEmail] = useState("");
+  const [reqWhatsapp, setReqWhatsapp] = useState("");
+  const [isSubmittingRequest, setIsSubmittingRequest] = useState(false);
+  const [requestError, setRequestError] = useState<string | null>(null);
+  const [requestSuccessMessage, setRequestSuccessMessage] = useState<string | null>(null);
+
+  // Fechar modal ao pressionar a tecla Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && isRequestModalOpen && !isSubmittingRequest) {
+        setIsRequestModalOpen(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isRequestModalOpen, isSubmittingRequest]);
+
+  // Handler de envio para o FormSubmit
+  const handleRequestSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setRequestError(null);
+
+    const cleanNome = reqNome.trim();
+    const cleanEmail = reqEmail.trim();
+    const cleanWhatsapp = reqWhatsapp.trim();
+
+    if (!cleanNome || !cleanEmail || !cleanWhatsapp) {
+      setRequestError("Por favor, preencha todos os campos.");
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(cleanEmail)) {
+      setRequestError("Por favor, informe um endereço de e-mail corporativo válido.");
+      return;
+    }
+
+    setIsSubmittingRequest(true);
+
+    try {
+      const response = await fetch(
+        "https://formsubmit.co/ajax/essmendestecnologia@gmail.com",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            _subject: "🔔 Solicitação de Acesso ao Gestor Local",
+            nome: cleanNome,
+            email: cleanEmail,
+            whatsapp: cleanWhatsapp,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error("Não foi possível enviar a solicitação. Tente novamente em instantes.");
+      }
+
+      // Sucesso: limpa campos, fecha modal e exibe mensagem de sucesso
+      setReqNome("");
+      setReqEmail("");
+      setReqWhatsapp("");
+      setIsRequestModalOpen(false);
+      setErrorMessage(null);
+      setRequestSuccessMessage(
+        "Solicitação enviada com sucesso! A equipe da EssMendes Tecnologia analisará o pedido e entrará em contato."
+      );
+    } catch (err: unknown) {
+      console.error("[LoginPage] Falha ao enviar solicitação via FormSubmit:", err);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : "Erro inesperado ao conectar com o serviço de envio.";
+      setRequestError(msg);
+    } finally {
+      setIsSubmittingRequest(false);
+    }
+  };
 
   // Carrega preferências de "Lembrar-me" salvas localmente
   useEffect(() => {
@@ -172,6 +261,32 @@ function LoginForm() {
           </p>
         </div>
 
+        {/* NOTIFICAÇÃO DE SUCESSO DE SOLICITAÇÃO (GREEN BANNER) */}
+        {requestSuccessMessage && (
+          <div
+            role="status"
+            className="mt-6 flex items-start gap-3 rounded-2xl border border-emerald-500/40 bg-emerald-500/15 p-4 text-xs text-emerald-100 backdrop-blur-sm shadow-lg shadow-emerald-950/40 animate-in fade-in-50 duration-200"
+          >
+            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-400" />
+            <div className="flex-1">
+              <span className="font-bold text-emerald-300 block text-xs sm:text-sm mb-0.5">
+                Solicitação enviada com sucesso!
+              </span>
+              <p className="text-emerald-200/90 leading-relaxed text-[11px] sm:text-xs">
+                A equipe da EssMendes Tecnologia analisará o pedido e entrará em contato.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setRequestSuccessMessage(null)}
+              className="text-emerald-400 hover:text-emerald-200 transition p-1 cursor-pointer shrink-0"
+              title="Fechar aviso"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
+
         {/* NOTIFICAÇÃO DE ERRO (RED BANNER) */}
         {errorMessage && (
           <div
@@ -310,18 +425,189 @@ function LoginForm() {
         <div className="mt-7 pt-5 border-t border-slate-800/80 flex flex-col items-center gap-2 text-center text-[11px] text-slate-400">
           <div>
             Ainda não possui acesso autorizado?{" "}
-            <Link
-              href="/register"
-              className="font-semibold text-emerald-400 hover:text-emerald-300 hover:underline underline-offset-4 transition"
+            <button
+              type="button"
+              onClick={() => {
+                setRequestError(null);
+                setIsRequestModalOpen(true);
+              }}
+              className="font-semibold text-emerald-400 hover:text-emerald-300 hover:underline underline-offset-4 transition cursor-pointer"
             >
               Solicitar credenciais
-            </Link>
+            </button>
           </div>
           <p className="text-[10px] text-slate-500">
             &copy; {new Date().getFullYear()} EssMendes Tecnologia. Todos os direitos reservados.
           </p>
         </div>
       </div>
+
+      {/* MODAL DE SOLICITAÇÃO DE CREDENCIAIS (FORMSUBMIT) */}
+      {isRequestModalOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => {
+            if (!isSubmittingRequest) setIsRequestModalOpen(false);
+          }}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="request-modal-title"
+            className="relative w-full max-w-md rounded-3xl border border-slate-800/90 bg-[#14151f] p-7 sm:p-8 shadow-2xl shadow-black/95 backdrop-blur-2xl animate-in zoom-in-95 duration-200 text-slate-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Botão Fechar Modal */}
+            <button
+              type="button"
+              onClick={() => setIsRequestModalOpen(false)}
+              disabled={isSubmittingRequest}
+              aria-label="Fechar"
+              className="absolute top-5 right-5 p-1.5 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800/60 transition cursor-pointer disabled:opacity-50"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            {/* Cabeçalho da Modal */}
+            <div className="flex flex-col items-center text-center">
+              <div className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-emerald-400 mb-3">
+                <Sparkles className="h-3 w-3 text-emerald-400" />
+                <span>Solicitação de Acesso</span>
+              </div>
+              <h2
+                id="request-modal-title"
+                className="text-xl font-bold tracking-tight text-white"
+              >
+                Solicitar Credenciais
+              </h2>
+              <p className="mt-1.5 text-xs text-slate-400 max-w-xs leading-relaxed">
+                Preencha os dados abaixo para solicitar sua conta e ter acesso ao painel do Gestor Local.
+              </p>
+            </div>
+
+            {/* Banner de Erro na Modal */}
+            {requestError && (
+              <div
+                role="alert"
+                className="mt-5 flex items-start gap-2.5 rounded-2xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200"
+              >
+                <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-400" />
+                <span className="leading-normal">{requestError}</span>
+              </div>
+            )}
+
+            {/* Formulário da Modal */}
+            <form onSubmit={handleRequestSubmit} className="mt-5 space-y-4" noValidate>
+              {/* Nome Completo */}
+              <div>
+                <label
+                  htmlFor="req-nome"
+                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5"
+                >
+                  Nome Completo
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                    <User className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="req-nome"
+                    name="nome"
+                    type="text"
+                    required
+                    disabled={isSubmittingRequest}
+                    value={reqNome}
+                    onChange={(e) => setReqNome(e.target.value)}
+                    placeholder="Ex: Carlos Silva"
+                    className="block w-full rounded-xl border border-slate-700/80 bg-[#0b0c10]/90 py-2.5 pl-10 pr-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 transition"
+                  />
+                </div>
+              </div>
+
+              {/* E-mail Corporativo */}
+              <div>
+                <label
+                  htmlFor="req-email"
+                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5"
+                >
+                  E-mail Corporativo
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                    <Mail className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="req-email"
+                    name="email"
+                    type="email"
+                    required
+                    disabled={isSubmittingRequest}
+                    value={reqEmail}
+                    onChange={(e) => setReqEmail(e.target.value)}
+                    placeholder="seu.email@empresa.com.br"
+                    className="block w-full rounded-xl border border-slate-700/80 bg-[#0b0c10]/90 py-2.5 pl-10 pr-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Telefone / WhatsApp */}
+              <div>
+                <label
+                  htmlFor="req-whatsapp"
+                  className="block text-[11px] font-bold uppercase tracking-wider text-slate-300 mb-1.5"
+                >
+                  Telefone / WhatsApp
+                </label>
+                <div className="relative">
+                  <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3.5 text-slate-400">
+                    <Phone className="h-4 w-4" />
+                  </div>
+                  <input
+                    id="req-whatsapp"
+                    name="whatsapp"
+                    type="tel"
+                    required
+                    disabled={isSubmittingRequest}
+                    value={reqWhatsapp}
+                    onChange={(e) => setReqWhatsapp(e.target.value)}
+                    placeholder="(11) 98765-4321"
+                    className="block w-full rounded-xl border border-slate-700/80 bg-[#0b0c10]/90 py-2.5 pl-10 pr-3.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 shadow-inner focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:opacity-50 transition"
+                  />
+                </div>
+              </div>
+
+              {/* Botões de Ação */}
+              <div className="pt-2 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsRequestModalOpen(false)}
+                  disabled={isSubmittingRequest}
+                  className="w-1/3 py-2.5 px-3 rounded-xl font-bold text-xs text-slate-300 bg-slate-800/80 hover:bg-slate-700 hover:text-white border border-slate-700 transition cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingRequest}
+                  className="flex-1 py-2.5 px-4 rounded-xl font-bold text-xs sm:text-sm text-white bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:via-teal-500 hover:to-emerald-500 shadow-lg shadow-emerald-950/50 border border-emerald-500/30 transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+                >
+                  {isSubmittingRequest ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-white" />
+                      <span>Enviando...</span>
+                    </>
+                  ) : (
+                    <>
+                      <span>Enviar Solicitação</span>
+                      <Send className="h-3.5 w-3.5" />
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -423,7 +423,7 @@ export default function ComparativoPage() {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Buscando...</span>
+                    <span>Mapeando 50+...</span>
                   </>
                 ) : (
                   <>
@@ -434,6 +434,16 @@ export default function ComparativoPage() {
               </button>
             </div>
           </form>
+
+          {/* Estado de Carregamento Informativo */}
+          {loading && (
+            <div className="mt-4 p-3.5 rounded-xl bg-purple-950/40 border border-purple-500/40 flex items-center justify-center gap-2.5 text-purple-200 text-xs sm:text-sm animate-pulse shadow-md">
+              <Loader2 className="w-4 h-4 animate-spin text-purple-400 shrink-0" />
+              <span className="font-bold">
+                Buscando e mapeando mais de 50 concorrentes na região...
+              </span>
+            </div>
+          )}
 
           {error && (
             <div className="mt-4 p-3 rounded-xl bg-red-950/80 border border-red-800 text-red-300 text-xs flex items-center gap-2">
@@ -550,13 +560,19 @@ export default function ComparativoPage() {
             {/* COLUNA ESQUERDA: TABELA DE CONCORRENTES */}
             <div className="lg:col-span-7 space-y-4">
               <div className="bg-[#14151f] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-                <div className="p-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-2">
+                <div className="p-4 border-b border-slate-800 flex items-center justify-between flex-wrap gap-3">
                   <div>
-                    <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-emerald-400" />
-                      Concorrentes no Google Maps ({competitors.length})
-                    </h3>
-                    <p className="text-xs text-slate-400">
+                    <div className="flex items-center gap-2.5 flex-wrap">
+                      <h3 className="text-sm font-black text-white uppercase tracking-wider flex items-center gap-2">
+                        <Trophy className="w-4 h-4 text-emerald-400" />
+                        Concorrentes no Google Maps
+                      </h3>
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-extrabold bg-gradient-to-r from-purple-500/20 to-emerald-500/20 text-purple-200 border border-purple-500/30 shadow-sm">
+                        <Sparkles className="w-3.5 h-3.5 text-purple-400" />
+                        Exibindo {competitors.length} empresas encontradas
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
                       Use os seletores para definir Empresa A (Prospect) e Empresa B (Benchmark)
                     </p>
                   </div>
@@ -908,19 +924,30 @@ export default function ComparativoPage() {
               </div>
             </div>
           </div>
-        ) : (
-          !loading && (
-            <div className="text-center py-16 bg-[#14151f] rounded-2xl border border-slate-800/80 p-8 space-y-3">
-              <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
-                <Search className="w-7 h-7" />
-              </div>
-              <h3 className="text-lg font-bold text-white">Nenhum benchmark realizado ainda</h3>
-              <p className="text-sm text-slate-400 max-w-md mx-auto">
-                Digite o nicho e a cidade desejada acima e clique em &quot;Analisar&quot; para puxar
-                dados reais e detalhados do Google Places.
-              </p>
+        ) : loading ? (
+          <div className="text-center py-20 bg-[#14151f] rounded-2xl border border-purple-500/30 p-8 space-y-4 shadow-xl">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+              <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
             </div>
-          )
+            <h3 className="text-lg font-bold text-white">Mapeando Mercado Local</h3>
+            <p className="text-sm font-semibold text-purple-300 max-w-md mx-auto">
+              Buscando e mapeando mais de 50 concorrentes na região...
+            </p>
+            <p className="text-xs text-slate-400 max-w-sm mx-auto">
+              Executando paginação estendida no Google Places e consolidando dados de avaliações, notas e presença digital.
+            </p>
+          </div>
+        ) : (
+          <div className="text-center py-16 bg-[#14151f] rounded-2xl border border-slate-800/80 p-8 space-y-3">
+            <div className="w-14 h-14 mx-auto rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+              <Search className="w-7 h-7" />
+            </div>
+            <h3 className="text-lg font-bold text-white">Nenhum benchmark realizado ainda</h3>
+            <p className="text-sm text-slate-400 max-w-md mx-auto">
+              Digite o nicho e a cidade desejada acima e clique em &quot;Analisar&quot; para puxar
+              dados reais e detalhados do Google Places.
+            </p>
+          </div>
         )}
       </main>
 

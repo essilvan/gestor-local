@@ -4,6 +4,18 @@ import type { CompetitorItem, BenchmarkMetrics } from "@/types";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
+function extractInstagramHandle(url: string | null | undefined): string | null {
+  if (!url) return null;
+  const match = url.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)/i);
+  if (match && match[1]) {
+    const handle = match[1].replace(/\/$/, "");
+    if (!["p", "explore", "reel", "stories", "tv"].includes(handle.toLowerCase())) {
+      return handle;
+    }
+  }
+  return null;
+}
+
 interface BenchmarkRequestBody {
   query?: string;
   city?: string;
@@ -41,7 +53,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Consulta ao Text Search do Google Places
+    // 1. Consulta ao Text Search do Google Places com loop de paginação (3 páginas = até 60 resultados)
+    const allResults: any[] = [];
+
+    // Página 1
     const textSearchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(
       `${cleanQuery} em ${cleanCity}`
     )}&language=pt-BR&key=${apiKey}`;
@@ -76,9 +91,96 @@ export async function POST(request: Request) {
       );
     }
 
-    const rawResults: any[] = Array.isArray(textSearchData.results)
-      ? textSearchData.results
-      : [];
+    if (Array.isArray(textSearchData.results)) {
+      allResults.push(...textSearchData.results);
+    }
+
+    // Página 2 (se next_page_token existir)
+    let nextPageToken: string | null =
+      textSearchData.next_page_token || textSearchData.nextPageToken || null;
+
+    if (nextPageToken) {
+      // Google Places requer delay de 2000ms para next_page_token ficar ativo
+      await new Promise((r) => setTimeout(r, 2000));
+
+      let page2Data: any = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const page2Url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(
+            nextPageToken
+          )}&key=${apiKey}`;
+
+          const page2Res = await fetch(page2Url, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          });
+
+          if (page2Res.ok) {
+            page2Data = await page2Res.json();
+            if (page2Data.status === "OK") break;
+            if (page2Data.status === "INVALID_REQUEST" && attempt === 0) {
+              await new Promise((r) => setTimeout(r, 1500));
+              continue;
+            }
+          }
+        } catch (err) {
+          console.error("[places/benchmark] Falha ao consultar página 2:", err);
+        }
+      }
+
+      if (page2Data?.status === "OK" && Array.isArray(page2Data.results)) {
+        allResults.push(...page2Data.results);
+        nextPageToken = page2Data.next_page_token || page2Data.nextPageToken || null;
+      } else {
+        nextPageToken = null;
+      }
+    }
+
+    // Página 3 (se segundo next_page_token existir)
+    if (nextPageToken) {
+      // Google Places requer delay de 2000ms novamente
+      await new Promise((r) => setTimeout(r, 2000));
+
+      let page3Data: any = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const page3Url = `https://maps.googleapis.com/maps/api/place/textsearch/json?pagetoken=${encodeURIComponent(
+            nextPageToken
+          )}&key=${apiKey}`;
+
+          const page3Res = await fetch(page3Url, {
+            method: "GET",
+            headers: { Accept: "application/json" },
+            cache: "no-store",
+          });
+
+          if (page3Res.ok) {
+            page3Data = await page3Res.json();
+            if (page3Data.status === "OK") break;
+            if (page3Data.status === "INVALID_REQUEST" && attempt === 0) {
+              await new Promise((r) => setTimeout(r, 1500));
+              continue;
+            }
+          }
+        } catch (err) {
+          console.error("[places/benchmark] Falha ao consultar página 3:", err);
+        }
+      }
+
+      if (page3Data?.status === "OK" && Array.isArray(page3Data.results)) {
+        allResults.push(...page3Data.results);
+      }
+    }
+
+    // Concatena e deduplica todos os lugares por place_id
+    const uniqueMap = new Map<string, any>();
+    for (const item of allResults) {
+      if (item && item.place_id && !uniqueMap.has(item.place_id)) {
+        uniqueMap.set(item.place_id, item);
+      }
+    }
+    const rawResults: any[] = Array.from(uniqueMap.values());
 
     if (rawResults.length === 0) {
       const emptyMetrics: BenchmarkMetrics = {
@@ -96,10 +198,8 @@ export async function POST(request: Request) {
       });
     }
 
-    // 2. Filtra os 15 primeiros resultados e busca detalhes completos
-    const top15 = rawResults.slice(0, 15);
-
-    const detailsPromises = top15.map(async (item) => {
+    // 2. Busca detalhes completos para todos os lugares encontrados (50+ concorrentes)
+    const detailsTasks = rawResults.map((item) => async () => {
       if (!item.place_id) {
         return null;
       }
@@ -127,22 +227,19 @@ export async function POST(request: Request) {
       }
     });
 
-    const settledDetails = await Promise.all(detailsPromises);
+    const CONCURRENCY = 12;
+    const settledDetails: any[] = new Array(rawResults.length);
+    let taskIndex = 0;
+    const workers = new Array(Math.min(CONCURRENCY, rawResults.length)).fill(0).map(async () => {
+      while (taskIndex < rawResults.length) {
+        const i = taskIndex++;
+        settledDetails[i] = await detailsTasks[i]();
+      }
+    });
+    await Promise.all(workers);
 
-function extractInstagramHandle(url: string | null | undefined): string | null {
-  if (!url) return null;
-  const match = url.match(/(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9_.]+)/i);
-  if (match && match[1]) {
-    const handle = match[1].replace(/\/$/, "");
-    if (!["p", "explore", "reel", "stories", "tv"].includes(handle.toLowerCase())) {
-      return handle;
-    }
-  }
-  return null;
-}
-
-    // 3. Monta os concorrentes combinando dados da busca e detalhes
-    const competitors: CompetitorItem[] = top15.map((item, index) => {
+    // 3. Monta todos os concorrentes combinando dados da busca e detalhes
+    const competitors: CompetitorItem[] = rawResults.map((item, index) => {
       const details = settledDetails[index] || {};
 
       const name = details.name || item.name || "Empresa Sem Nome";

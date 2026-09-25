@@ -358,6 +358,12 @@ export default function ProspeccaoPage() {
             </div>
           )}
 
+          {/* Badge de contagem */}
+          <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold bg-emerald-500/10 text-emerald-300 border border-emerald-500/30 whitespace-nowrap shadow-sm">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            Exibindo {filteredProspects.length} empresas encontradas
+          </span>
+
           {/* Botões de Ação */}
           <div className="flex items-center gap-2">
             <button
@@ -384,6 +390,19 @@ export default function ProspeccaoPage() {
             </Link>
           </div>
         </div>
+
+        {/* ESTADO DE CARREGAMENTO */}
+        {loading && (
+          <div className="text-center py-20 bg-[#14151f] rounded-2xl border border-emerald-500/20 p-8 space-y-4 shadow-xl">
+            <div className="w-16 h-16 mx-auto rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <Loader2 className="w-8 h-8 animate-spin" />
+            </div>
+            <h3 className="text-lg font-bold text-white">Carregando Leads do Funil</h3>
+            <p className="text-sm text-slate-400 max-w-md mx-auto">
+              Sincronizando pipeline de prospecção com o banco de dados...
+            </p>
+          </div>
+        )}
 
         {/* MENSAGEM QUANDO VAZIO */}
         {!loading && prospects.length === 0 && (

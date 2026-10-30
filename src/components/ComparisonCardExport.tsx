@@ -7,19 +7,19 @@ import {
   Download,
   Check,
   Star,
-  Globe,
   AlertTriangle,
-  Zap,
-  TrendingDown,
   Trophy,
   ShieldCheck,
-  Building2,
-  Sparkles,
   Loader2,
   MapPin,
-  Flame,
   FileText,
   Layers,
+  MessageSquare,
+  ExternalLink,
+  TrendingDown,
+  TrendingUp,
+  BarChart3,
+  Phone,
 } from "lucide-react";
 import type { CompetitorItem } from "@/types";
 import { generateSalesPitch } from "@/lib/sales-pitch";
@@ -54,7 +54,7 @@ export function ComparisonCardExport({
   const [leaderBase64, setLeaderBase64] = useState<string | null>(null);
   const [loadingImages, setLoadingImages] = useState(false);
 
-  // Feedback unificado de cópia e mensagem
+  // Estados de cópia e download
   const [copyingDual, setCopyingDual] = useState(false);
   const [copyingSingle, setCopyingSingle] = useState(false);
   const [copiedUnifiedDual, setCopiedUnifiedDual] = useState(false);
@@ -70,9 +70,26 @@ export function ComparisonCardExport({
   const leaderPhoto = leader.photo_url || (leader as unknown as { photoUrl?: string }).photoUrl;
 
   const deficit = Math.max(0, leader.user_ratings_total - target.user_ratings_total);
-  const isTargetTheLeader = target.place_id === leader.place_id;
+  const isTargetTheLeader = target.place_id === leader.place_id || deficit === 0;
 
-  // Pitch comercial persuasivo unificado para acompanhar o criativo
+  // Estimativa data-driven de contatos perdidos por mês
+  const lostContactsPerMonth = useMemo(() => {
+    if (isTargetTheLeader) return 0;
+    const baseLost = Math.round(deficit * 0.25);
+    const websitePenalty = target.has_website ? 0 : 35;
+    const total = baseLost + websitePenalty;
+    return Math.max(28, Math.min(total, 450));
+  }, [deficit, isTargetTheLeader, target.has_website]);
+
+  // Telefone formatado para link direto de WhatsApp
+  const targetWaPhone = useMemo(() => {
+    const raw = target.formatted_phone_number || target.phone || "";
+    const cleaned = raw.replace(/\D/g, "");
+    if (!cleaned) return null;
+    return cleaned.startsWith("55") ? cleaned : `55${cleaned}`;
+  }, [target.formatted_phone_number, target.phone]);
+
+  // Pitch comercial de alta conversão
   const outreachPitch = useMemo(() => {
     if (salesPitch) return salesPitch;
     return generateSalesPitch({
@@ -164,20 +181,20 @@ export function ComparisonCardExport({
   };
 
   const exportOptions = {
-    pixelRatio: 2, // Sharp 1080x1080 resolution
+    pixelRatio: 2, // Resolução nítida para telas de alta densidade
     filter: (_node: HTMLElement) => true,
-    backgroundColor: "#0b0c10",
+    backgroundColor: "#080b11",
   };
 
-  // Ação Unificada: Copiar Imagem + Mensagem
+  // Copiar Imagem para o Clipboard (Ctrl+V no WhatsApp)
   const handleCopyUnified = async (cardElement: HTMLDivElement | null, isDual: boolean) => {
     if (!cardElement) return;
     if (isImageLoading) {
       setErrorMessage("Aguarde o carregamento das fotos para copiar.");
       return;
     }
-    if (isDual) setCopiedUnifiedDual(true);
-    else setCopiedUnifiedSingle(true);
+    if (isDual) setCopyingDual(true);
+    else setCopyingSingle(true);
     setErrorMessage(null);
 
     try {
@@ -199,13 +216,13 @@ export function ComparisonCardExport({
         }
 
         setToastMessage(
-          "Imagem copiada! No WhatsApp, cole a imagem com Ctrl+V. O texto da proposta foi copiado para usar como legenda."
+          "Imagem do relatório copiada! No WhatsApp, cole com Ctrl+V. Use a mensagem rápida abaixo para iniciar a conversa:"
         );
       } else {
         // Fallback: download
         const url = URL.createObjectURL(blob);
         const link = document.createElement("a");
-        link.download = `${isDual ? "comparativo-duplo" : "raio-x"}-${target.name
+        link.download = `auditoria-posicionamento-${target.name
           .toLowerCase()
           .replace(/[^a-z0-9]/g, "-")}.png`;
         link.href = url;
@@ -214,14 +231,14 @@ export function ComparisonCardExport({
       }
     } catch (err) {
       console.error("Erro ao copiar imagem:", err);
-      setErrorMessage("Erro ao copiar imagem. Utilize 'Baixar PNG'.");
+      setErrorMessage("Erro ao copiar imagem para o clipboard. Utilize o botão 'Baixar PNG'.");
     } finally {
-      if (isDual) setCopiedUnifiedDual(false);
-      else setCopiedUnifiedSingle(false);
+      if (isDual) setCopyingDual(false);
+      else setCopyingSingle(false);
     }
   };
 
-  // Ação Secundária: Copiar Somente Texto da Legenda / Proposta
+  // Copiar Somente o Texto da Abordagem
   const handleCopyTextOnly = async (isDual = true) => {
     try {
       await navigator.clipboard.writeText(outreachPitch);
@@ -232,14 +249,14 @@ export function ComparisonCardExport({
         setCopiedTextSingle(true);
         setTimeout(() => setCopiedTextSingle(false), 3000);
       }
-      setToastMessage("Texto da proposta copiado para a área de transferência!");
+      setToastMessage("Script de abordagem copiado com sucesso!");
     } catch (err) {
       console.error("Erro ao copiar texto:", err);
-      setErrorMessage("Erro ao copiar texto da proposta.");
+      setErrorMessage("Erro ao copiar texto da abordagem.");
     }
   };
 
-  // Função genérica para download de PNG
+  // Download do arquivo PNG em alta resolução
   const handleDownload = async (cardElement: HTMLDivElement | null, isDual: boolean) => {
     if (!cardElement) return;
     if (isImageLoading) {
@@ -256,7 +273,7 @@ export function ComparisonCardExport({
       const dataUrl = await toPng(cardElement, exportOptions);
 
       const link = document.createElement("a");
-      link.download = `${isDual ? "comparativo-duplo" : "raio-x-individual"}-${target.name
+      link.download = `auditoria-${isDual ? "comparativo-duplo" : "raio-x-individual"}-${target.name
         .toLowerCase()
         .replace(/[^a-z0-9]/g, "-")}.png`;
       link.href = dataUrl;
@@ -272,8 +289,8 @@ export function ComparisonCardExport({
 
   return (
     <div className="flex flex-col items-center w-full space-y-4">
-      {/* SELETOR DE ABAS ENTRE OS DOIS ASSETS VISUAIS */}
-      <div className="flex items-center justify-between w-full bg-[#0b0c10] p-1.5 rounded-xl border border-slate-800">
+      {/* SELETOR DE ABAS ENTRE OS FORMATOS VISUAIS */}
+      <div className="flex items-center justify-between w-full bg-[#0b0e17] p-1.5 rounded-xl border border-slate-800">
         <button
           type="button"
           onClick={() => setActiveTab("dual")}
@@ -284,7 +301,7 @@ export function ComparisonCardExport({
           }`}
         >
           <Layers className="w-3.5 h-3.5" />
-          <span>Card Comparativo Duplo</span>
+          <span>Auditoria Comparativa (Lado a Lado)</span>
         </button>
 
         <button
@@ -297,7 +314,7 @@ export function ComparisonCardExport({
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          <span>Raio-X Individual (Snapshot)</span>
+          <span>Diagnóstico Individual (Snapshot)</span>
         </button>
       </div>
 
@@ -307,41 +324,26 @@ export function ComparisonCardExport({
         </div>
       )}
 
-      {/* TOAST / MODAL TOOLTIP INFORMATIVO DE CÓPIA UNIFICADA */}
+      {/* MODAL / TOAST DE FEEDBACK COM SCRIPT E AÇÕES */}
       {toastMessage && (
-        <div className="w-full p-3.5 rounded-xl bg-gradient-to-r from-purple-950/90 via-[#151329] to-[#0f1422] border border-purple-500/50 text-white shadow-2xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
-          <div className="flex items-start gap-3">
-            <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0 shadow-inner mt-0.5 sm:mt-0">
-              <Sparkles className="w-4 h-4 text-purple-300" />
+        <div className="w-full p-4 rounded-2xl bg-gradient-to-r from-[#121626] via-[#10192e] to-[#0c121e] border border-purple-500/40 text-white shadow-2xl flex flex-col gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <div className="w-8 h-8 rounded-xl bg-purple-500/20 border border-purple-400/30 flex items-center justify-center shrink-0 mt-0.5">
+                <Check className="w-4 h-4 text-emerald-400" />
+              </div>
+              <div className="space-y-1">
+                <p className="text-xs font-bold text-white">{toastMessage}</p>
+                <p className="text-[11px] text-slate-300">
+                  Dica: Cole o print do relatório no chat com{" "}
+                  <kbd className="bg-purple-950 px-1.5 py-0.5 rounded text-purple-200 border border-purple-700/60 font-mono text-[10px]">
+                    Ctrl+V
+                  </kbd>{" "}
+                  e envie a mensagem de curiosidade em seguida para engajar o responsável.
+                </p>
+              </div>
             </div>
-            <div className="space-y-0.5">
-              <p className="text-xs font-bold text-white flex items-center gap-1.5">
-                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                <span>{toastMessage}</span>
-              </p>
-              <p className="text-[11px] text-slate-300">
-                Cole a imagem direto no chat com{" "}
-                <kbd className="bg-purple-900/80 px-1.5 py-0.5 rounded text-purple-200 border border-purple-600/60 font-mono text-[10px]">
-                  Ctrl+V
-                </kbd>{" "}
-                e use a proposta como legenda ou mensagem direta.
-              </p>
-            </div>
-          </div>
 
-          <div className="flex items-center gap-2 self-end sm:self-auto shrink-0">
-            <button
-              type="button"
-              onClick={() => handleCopyTextOnly(activeTab === "dual")}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition flex items-center gap-1.5 shadow-md active:scale-95"
-            >
-              <Copy className="w-3.5 h-3.5" />
-              <span>
-                {copiedTextDual || copiedTextSingle
-                  ? "Texto Copiado!"
-                  : "Copiar Somente Texto"}
-              </span>
-            </button>
             <button
               type="button"
               onClick={() => setToastMessage(null)}
@@ -351,23 +353,58 @@ export function ComparisonCardExport({
               ✕
             </button>
           </div>
+
+          {/* Script de Abordagem Pronto para Cópia ou WhatsApp Direto */}
+          <div className="bg-[#080b11] p-3 rounded-xl border border-slate-800/90 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5">
+            <div className="text-xs text-slate-300 font-mono line-clamp-2 max-w-xl">
+              &quot;{outreachPitch.replace(/\n+/g, " ").slice(0, 160)}...&quot;
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+              <button
+                type="button"
+                onClick={() => handleCopyTextOnly(activeTab === "dual")}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-purple-600 hover:bg-purple-500 text-white transition flex items-center gap-1.5 shadow-md active:scale-95"
+              >
+                <Copy className="w-3.5 h-3.5" />
+                <span>
+                  {copiedTextDual || copiedTextSingle
+                    ? "Copiado!"
+                    : "Copiar Texto"}
+                </span>
+              </button>
+
+              {targetWaPhone && (
+                <a
+                  href={`https://wa.me/${targetWaPhone}?text=${encodeURIComponent(outreachPitch)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition flex items-center gap-1.5 shadow-md active:scale-95"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>WhatsApp</span>
+                  <ExternalLink className="w-2.5 h-2.5" />
+                </a>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
       {/* ========================================================================= */}
-      {/* ABA 1: CARD COMPARATIVO DUPLO (1080x1080)                                */}
+      {/* ABA 1: CARD COMPARATIVO DUPLO 1080x1080 (AUDITORIA EXECUTIVA)             */}
       {/* ========================================================================= */}
       {activeTab === "dual" && (
         <div className="w-full flex flex-col items-center space-y-3">
-          {/* BARRA DE BOTÕES DO CARD DUPLO */}
-          <div className="flex flex-wrap items-center justify-between gap-2 w-full bg-[#14151f] p-3 rounded-xl border border-slate-800">
+          {/* BARRA DE BOTÕES DE EXPORTAÇÃO */}
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full bg-[#101422] p-3 rounded-xl border border-slate-800">
             <div className="text-xs text-slate-300 font-medium flex items-center gap-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-purple-400" />
-              <span>Asset A: 1080x1080 Dual</span>
+              <BarChart3 className="w-3.5 h-3.5 text-purple-400" />
+              <span>Auditoria Executiva 1080x1080</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* BOTÃO PRIMÁRIO: COPIAR IMAGEM + MENSAGEM */}
+              {/* BOTÃO PRIMÁRIO: COPIAR IMAGEM */}
               <button
                 type="button"
                 onClick={() => handleCopyUnified(dualCardRef.current, true)}
@@ -379,25 +416,25 @@ export function ComparisonCardExport({
                     ? "bg-purple-900/50 text-purple-300 cursor-not-allowed opacity-80"
                     : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white active:scale-95 shadow-purple-600/30"
                 }`}
-                title="Copiar Imagem e preparar proposta para colar no WhatsApp"
+                title="Copiar Imagem e preparar abordagem para colar no WhatsApp"
               >
                 {copyingDual || isImageLoading ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : copiedUnifiedDual ? (
                   <Check className="w-3.5 h-3.5" />
                 ) : (
-                  <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+                  <Copy className="w-3.5 h-3.5 text-purple-200" />
                 )}
                 <span>
                   {copiedUnifiedDual
                     ? "Imagem Copiada!"
                     : isImageLoading
-                    ? "Carregando Fotos..."
-                    : "Copiar Imagem + Mensagem"}
+                    ? "Processando..."
+                    : "Copiar Imagem (Ctrl+V)"}
                 </span>
               </button>
 
-              {/* BOTÃO SECUNDÁRIO: COPIAR SOMENTE TEXTO */}
+              {/* BOTÃO SECUNDÁRIO: COPIAR SCRIPT */}
               <button
                 type="button"
                 onClick={() => handleCopyTextOnly(true)}
@@ -406,14 +443,14 @@ export function ComparisonCardExport({
                     ? "bg-emerald-800/80 text-white border-emerald-500"
                     : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
                 }`}
-                title="Copiar apenas o texto do script comercial para a legenda"
+                title="Copiar o script comercial curto de curiosidade"
               >
                 {copiedTextDual ? (
                   <Check className="w-3.5 h-3.5 text-emerald-300" />
                 ) : (
-                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
                 )}
-                <span>{copiedTextDual ? "Texto Copiado!" : "Copiar Somente Texto"}</span>
+                <span>{copiedTextDual ? "Script Copiado!" : "Copiar Script"}</span>
               </button>
 
               {/* BOTÃO TERCIÁRIO: BAIXAR PNG */}
@@ -438,8 +475,8 @@ export function ComparisonCardExport({
             </div>
           </div>
 
-          {/* PREVIEW CONTAINER RESPONSIVO (SCALE 0.38) */}
-          <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#07080b] p-2 flex justify-center shadow-2xl">
+          {/* CONTAINER RESPONSIVO DE PREVIEW (SCALE 0.38) */}
+          <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#06080e] p-2 flex justify-center shadow-2xl">
             <div
               style={{
                 transform: "scale(0.38)",
@@ -450,281 +487,292 @@ export function ComparisonCardExport({
               }}
               className="shrink-0"
             >
-              {/* O NÓ REAL 1080x1080 - CARD DUPLO */}
+              {/* CANVAS REAL 1080x1080 - AUDITORIA DE PRESENÇA LOCAL & GOOGLE MAPS */}
               <div
                 ref={dualCardRef}
                 key={`export-card-${target.place_id}-${leader.place_id}`}
                 style={{
                   width: "1080px",
                   height: "1080px",
-                  backgroundColor: "#0b0c10",
+                  backgroundColor: "#080b11",
                   backgroundImage:
-                    "radial-gradient(circle at 50% 0%, #1c1836 0%, #0b0c10 75%)",
+                    "radial-gradient(circle at 50% 0%, #151d30 0%, #080b11 75%)",
                 }}
-                className="relative flex flex-col justify-between p-12 text-white select-none box-border border-4 border-purple-500/30 shadow-2xl"
+                className="relative flex flex-col justify-between p-11 text-white select-none box-border border-2 border-slate-700/60 shadow-2xl overflow-hidden font-sans"
               >
-                {/* Luzes de Fundo */}
-                <div className="absolute top-0 left-0 w-96 h-96 bg-red-600/10 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute top-0 right-0 w-96 h-96 bg-emerald-600/10 rounded-full blur-3xl pointer-events-none" />
+                {/* Efeitos Sutis de Fundo Executivo */}
+                <div className="absolute -top-20 -left-20 w-80 h-80 bg-amber-500/5 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute -top-20 -right-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl pointer-events-none" />
 
-                {/* CABEÇALHO */}
-                <div className="relative z-10 flex items-center justify-between border-b border-slate-800 pb-6">
-                  <div className="flex items-center gap-4">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-purple-600/40">
-                      <Flame className="w-8 h-8 text-white" />
+                {/* 1. TOP HEADER EXECUTIVO */}
+                <div className="relative z-10 border-b border-slate-800 pb-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-700/80">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                      <span className="text-[11px] font-black uppercase tracking-widest text-slate-300">
+                        RELATÓRIO CONFIDENCIAL • INTELIGÊNCIA COMPETITIVA
+                      </span>
                     </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-black uppercase tracking-widest text-purple-400 bg-purple-950/80 border border-purple-800/80 px-3 py-1 rounded-full">
-                          GESTOR LOCAL • AUDITORIA GOOGLE MAPS
-                        </span>
-                        <span className="text-xs font-bold text-slate-400 uppercase">
-                          {category}
-                        </span>
-                      </div>
-                      <h1 className="text-3xl font-black text-white mt-1">
-                        Disputa de Mercado &amp; Visibilidade Local
-                      </h1>
+
+                    <div className="flex items-center gap-2 text-xs font-bold text-slate-300 bg-slate-900/90 border border-slate-800 px-3 py-1 rounded-full uppercase tracking-wider">
+                      <MapPin className="w-3.5 h-3.5 text-indigo-400" />
+                      <span>{category} • {city}</span>
                     </div>
                   </div>
 
-                  <div className="text-right">
-                    <span className="text-xs font-semibold text-slate-400">Região</span>
-                    <p className="text-xl font-bold text-white uppercase tracking-wider">
-                      {city}
-                    </p>
+                  <div className="flex items-baseline justify-between mt-1">
+                    <div>
+                      <h1 className="text-3xl font-black text-white tracking-tight">
+                        AUDITORIA DE PRESENÇA LOCAL &amp; GOOGLE MAPS
+                      </h1>
+                      <p className="text-xs font-semibold text-slate-400 mt-0.5">
+                        Diagnóstico executivo de autoridade, visibilidade orgânica e conversão no Google Meu Negócio
+                      </p>
+                    </div>
+
+                    <div className="text-right">
+                      <span className="text-[10px] font-mono font-bold text-slate-400 bg-slate-900 px-2.5 py-1 rounded border border-slate-800">
+                        REF: {target.place_id ? target.place_id.slice(-6).toUpperCase() : "MAPS-BR"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
-                {/* LADO A LADO: PROSPECT VS BENCHMARK LÍDER */}
-                <div className="relative z-10 grid grid-cols-11 gap-6 my-auto items-stretch">
-                  {/* COLUNA ESQUERDA: PROSPECT (EMPRESA ALVO) */}
-                  <div className="col-span-5 rounded-3xl bg-[#14151f] border-2 border-red-500/40 p-6 flex flex-col justify-between shadow-2xl">
+                {/* 2. GRID COMPARATIVO LADO A LADO (ESQUERDA: PROSPECT vs DIREITA: LÍDER) */}
+                <div className="relative z-10 grid grid-cols-2 gap-6 my-auto">
+                  {/* COLUNA ESQUERDA: PROSPECT ({target.name}) */}
+                  <div className="rounded-3xl bg-[#0f1422] border-2 border-slate-700/80 p-5 flex flex-col justify-between shadow-2xl relative">
                     <div>
+                      {/* Badge de Status do Prospect */}
                       <div className="flex items-center justify-between mb-3">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-red-500/15 border border-red-500/30 text-red-400 text-xs font-black uppercase tracking-wider">
-                          <AlertTriangle className="w-3.5 h-3.5" />
-                          EMPRESA ALVO (PROSPECT)
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-xs font-black uppercase tracking-wider">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                          {isTargetTheLeader ? "LÍDER DA REGIÃO" : "OPORTUNIDADE DE CRESCIMENTO / DÉFICIT"}
                         </span>
-                        <span className="text-xs text-slate-500 font-mono">Status Atual</span>
+                        <span className="text-[11px] font-mono text-slate-400">Perfil Analisado</span>
                       </div>
 
-                      {/* Foto Real / Fachada do Prospect */}
-                      <div
-                        key={`container-target-${target.place_id || target.name}-${targetPhoto}`}
-                        className="w-full h-44 rounded-2xl overflow-hidden mb-4 bg-slate-900 border border-slate-800 relative"
-                      >
+                      {/* Foto Real de Fachada / Perfil */}
+                      <div className="w-full h-36 rounded-2xl overflow-hidden mb-3 bg-slate-900 border border-slate-800 relative">
                         {isTargetLoading ? (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
-                            <Loader2 className="w-7 h-7 animate-spin text-purple-400" />
-                            <span className="text-xs">Processando foto...</span>
+                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 space-y-1">
+                            <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+                            <span className="text-[11px]">Carregando foto...</span>
                           </div>
                         ) : (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            key={`target-${target.place_id || target.name}-${targetPhoto}`}
                             src={targetBase64 || "/placeholder-store.svg"}
                             alt={target.name}
                             className="w-full h-full object-cover"
                           />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#14151f] via-transparent to-transparent pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0f1422] via-transparent to-transparent pointer-events-none" />
                       </div>
 
-                      {/* Nome da Empresa Alvo */}
-                      <h2 className="text-2xl font-black text-white leading-tight min-h-[56px] line-clamp-2">
-                        {target.name}
-                      </h2>
+                      {/* Nome do Prospect */}
+                      <div className="mb-4">
+                        <h2 className="text-2xl font-black text-white leading-tight min-h-[58px] line-clamp-2">
+                          {target.name}
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">
+                          {target.formatted_address || "Endereço verificado no Google Maps"}
+                        </p>
+                      </div>
                     </div>
 
-                    {/* Métricas do Prospect */}
-                    <div className="space-y-3 my-4">
-                      {/* Rating e Reviews */}
-                      <div className="bg-[#0b0c10] p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl font-black text-amber-400">
-                            {target.rating ? target.rating.toFixed(1) : "0.0"}
-                          </span>
-                          <div className="flex text-amber-400">
-                            {[1, 2, 3, 4, 5].map((i) => (
-                              <Star
-                                key={i}
-                                className={`w-4 h-4 ${
-                                  i <= Math.round(target.rating || 0)
-                                    ? "fill-amber-400 text-amber-400"
-                                    : "text-slate-700"
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                        <span className="text-sm font-bold text-slate-300">
-                          {target.user_ratings_total} avaliações
-                        </span>
-                      </div>
-
-                      {/* Status Website */}
-                      <div
-                        className={`p-3.5 rounded-2xl border ${
-                          target.has_website
-                            ? "bg-slate-900 border-slate-700 text-slate-300"
-                            : "bg-red-950/70 border-red-600 text-red-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5">
-                          {target.has_website ? (
-                            <Globe className="w-5 h-5 text-indigo-400 shrink-0" />
-                          ) : (
-                            <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 animate-pulse" />
-                          )}
-                          <div>
-                            <div className="text-[10px] font-black uppercase tracking-wider">
-                              Website
-                            </div>
-                            <div className="text-sm font-bold">
-                              {target.has_website
-                                ? "Website Ativo"
-                                : "🚨 Sem Website / Perda de Clientes"}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Déficit vs Líder */}
-                      <div className="p-3.5 rounded-2xl bg-amber-950/40 border border-amber-600/50 flex items-center gap-2.5">
-                        <TrendingDown className="w-5 h-5 text-amber-400 shrink-0" />
+                    {/* Métricas Chave do Prospect */}
+                    <div className="space-y-2.5">
+                      {/* Métrica 1: Avaliações no Google */}
+                      <div className="bg-[#090d16] p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
                         <div>
-                          <div className="text-[10px] font-black text-amber-400 uppercase tracking-wider">
-                            Déficit Competitivo
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            Avaliações no Google
                           </div>
-                          <div className="text-sm font-bold text-amber-200">
-                            {isTargetTheLeader
-                              ? "🏆 Atualmente liderando a região"
-                              : `📉 Déficit de -${deficit} avaliações`}
+                          <div className="text-3xl font-black text-white mt-0.5">
+                            {target.user_ratings_total}
                           </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                            {isTargetTheLeader ? "Liderança" : `-${deficit} reviews`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Métrica 2: Nota Média */}
+                      <div className="bg-[#090d16] p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            Nota Média
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-3xl font-black text-amber-400">
+                              {target.rating ? target.rating.toFixed(1) : "0.0"}
+                            </span>
+                            <div className="flex text-amber-400">
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-3.5 h-3.5 ${
+                                    i <= Math.round(target.rating || 0)
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "text-slate-800"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right text-[11px] font-semibold text-slate-400">
+                          Escala 0 a 5.0
+                        </div>
+                      </div>
+
+                      {/* Métrica 3: Estimativa de Contatos Perdidos */}
+                      <div className="bg-[#090d16] p-3.5 rounded-2xl border border-rose-500/30 flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-rose-300">
+                            Estimativa de Contatos Perdidos
+                          </div>
+                          <div className="text-2xl font-black text-rose-400 mt-0.5">
+                            {isTargetTheLeader ? "0 / mês" : `~${lostContactsPerMonth} contatos / mês`}
+                          </div>
+                        </div>
+                        <div className="text-right max-w-[140px]">
+                          <span className="text-[10px] font-bold text-rose-300/90 leading-tight block">
+                            Optam por quem tem mais avaliações
+                          </span>
                         </div>
                       </div>
                     </div>
                   </div>
 
-                  {/* MEIO: VS */}
-                  <div className="col-span-1 flex flex-col items-center justify-center my-auto">
-                    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-700 flex items-center justify-center font-black text-xl text-white shadow-xl shadow-purple-600/50 border border-purple-400/40">
-                      VS
-                    </div>
-                  </div>
-
-                  {/* COLUNA DIREITA: BENCHMARK LÍDER */}
-                  <div className="col-span-5 rounded-3xl bg-[#14151f] border-2 border-emerald-500/50 p-6 flex flex-col justify-between shadow-2xl">
+                  {/* COLUNA DIREITA: BENCHMARK LÍDER ({leader.name}) */}
+                  <div className="rounded-3xl bg-[#0e1724] border-2 border-emerald-500/50 p-5 flex flex-col justify-between shadow-2xl relative">
                     <div>
+                      {/* Badge de Status do Líder */}
                       <div className="flex items-center justify-between mb-3">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-400 text-xs font-black uppercase tracking-wider">
+                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs font-black uppercase tracking-wider">
                           <Trophy className="w-3.5 h-3.5 text-emerald-400" />
-                          BENCHMARK LÍDER (#1)
+                          LÍDER DA CATEGORIA
                         </span>
-                        <span className="text-xs text-emerald-400 font-bold">Liderança</span>
+                        <span className="text-[11px] font-mono text-emerald-400 font-bold">Benchmark #1</span>
                       </div>
 
-                      {/* Foto Real / Fachada do Líder */}
-                      <div
-                        key={`container-leader-${leader.place_id || leader.name}-${leaderPhoto}`}
-                        className="w-full h-44 rounded-2xl overflow-hidden mb-4 bg-slate-900 border border-slate-800 relative"
-                      >
+                      {/* Foto Real de Fachada do Líder */}
+                      <div className="w-full h-36 rounded-2xl overflow-hidden mb-3 bg-slate-900 border border-slate-800 relative">
                         {isLeaderLoading ? (
-                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
-                            <Loader2 className="w-7 h-7 animate-spin text-purple-400" />
-                            <span className="text-xs">Processando foto...</span>
+                          <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 space-y-1">
+                            <Loader2 className="w-6 h-6 animate-spin text-emerald-400" />
+                            <span className="text-[11px]">Carregando foto...</span>
                           </div>
                         ) : (
                           // eslint-disable-next-line @next/next/no-img-element
                           <img
-                            key={`leader-${leader.place_id || leader.name}-${leaderPhoto}`}
                             src={leaderBase64 || "/placeholder-store.svg"}
                             alt={leader.name}
                             className="w-full h-full object-cover"
                           />
                         )}
-                        <div className="absolute inset-0 bg-gradient-to-t from-[#14151f] via-transparent to-transparent pointer-events-none" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-[#0e1724] via-transparent to-transparent pointer-events-none" />
                       </div>
 
                       {/* Nome do Líder */}
-                      <h2 className="text-2xl font-black text-white leading-tight min-h-[56px] line-clamp-2">
-                        {leader.name}
-                      </h2>
+                      <div className="mb-4">
+                        <h2 className="text-2xl font-black text-white leading-tight min-h-[58px] line-clamp-2">
+                          {leader.name}
+                        </h2>
+                        <p className="text-xs text-slate-400 mt-1 line-clamp-1">
+                          {leader.formatted_address || "Endereço verificado no Google Maps"}
+                        </p>
+                      </div>
                     </div>
 
-                    {/* Métricas do Líder */}
-                    <div className="space-y-3 my-4">
-                      {/* Rating e Reviews */}
-                      <div className="bg-[#0b0c10] p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-2xl font-black text-emerald-400">
-                            {leader.rating ? leader.rating.toFixed(1) : "0.0"}
+                    {/* Métricas Chave do Líder */}
+                    <div className="space-y-2.5">
+                      {/* Métrica 1: Avaliações no Google */}
+                      <div className="bg-[#070e17] p-3.5 rounded-2xl border border-emerald-500/30 flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            Avaliações no Google
+                          </div>
+                          <div className="text-3xl font-black text-emerald-400 mt-0.5">
+                            {leader.user_ratings_total}
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <span className="text-[11px] font-bold text-emerald-300 bg-emerald-500/15 px-2.5 py-1 rounded-lg border border-emerald-500/30">
+                            Top #1 Categoria
                           </span>
-                          <div className="flex text-amber-400">
-                            {[1, 2, 3, 4, 5].map((i) => (
-                              <Star
-                                key={i}
-                                className={`w-4 h-4 ${
-                                  i <= Math.round(leader.rating || 0)
-                                    ? "fill-amber-400 text-amber-400"
-                                    : "text-slate-700"
-                                }`}
-                              />
-                            ))}
-                          </div>
-                        </div>
-                        <span className="text-sm font-black text-emerald-400">
-                          {leader.user_ratings_total} avaliações
-                        </span>
-                      </div>
-
-                      {/* Website Ativo */}
-                      <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-500 text-emerald-200 flex items-center gap-2.5">
-                        <Globe className="w-5 h-5 text-emerald-400 shrink-0" />
-                        <div>
-                          <div className="text-[10px] font-black text-emerald-400 uppercase tracking-wider">
-                            Presença Digital
-                          </div>
-                          <div className="text-sm font-bold text-white">
-                            🌐 Website Ativo &amp; Otimizado
-                          </div>
                         </div>
                       </div>
 
-                      {/* Agendamento Imediato */}
-                      <div className="p-3.5 rounded-2xl bg-indigo-950/60 border border-indigo-500 text-indigo-200 flex items-center gap-2.5">
-                        <Zap className="w-5 h-5 text-indigo-400 shrink-0" />
+                      {/* Métrica 2: Nota Média */}
+                      <div className="bg-[#070e17] p-3.5 rounded-2xl border border-slate-800 flex items-center justify-between">
                         <div>
-                          <div className="text-[10px] font-black text-indigo-400 uppercase tracking-wider">
-                            Conversão Direta
+                          <div className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+                            Nota Média
                           </div>
-                          <div className="text-sm font-bold text-white">
-                            ⚡ Agendamento Imediato Ativo
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-3xl font-black text-emerald-400">
+                              {leader.rating ? leader.rating.toFixed(1) : "0.0"}
+                            </span>
+                            <div className="flex text-amber-400">
+                              {[1, 2, 3, 4, 5].map((i) => (
+                                <Star
+                                  key={i}
+                                  className={`w-3.5 h-3.5 ${
+                                    i <= Math.round(leader.rating || 0)
+                                      ? "fill-amber-400 text-amber-400"
+                                      : "text-slate-800"
+                                  }`}
+                                />
+                              ))}
+                            </div>
                           </div>
+                        </div>
+                        <div className="text-right text-[11px] font-semibold text-emerald-400">
+                          Alta Reputação
+                        </div>
+                      </div>
+
+                      {/* Métrica 3: Conversão Dominante */}
+                      <div className="bg-[#070e17] p-3.5 rounded-2xl border border-emerald-500/30 flex items-center justify-between">
+                        <div>
+                          <div className="text-[10px] font-black uppercase tracking-wider text-emerald-300">
+                            Captação de Clientes
+                          </div>
+                          <div className="text-2xl font-black text-emerald-300 mt-0.5">
+                            Conversão Máxima
+                          </div>
+                        </div>
+                        <div className="text-right max-w-[140px]">
+                          <span className="text-[10px] font-bold text-emerald-400/90 leading-tight block">
+                            Concentra maior volume de cliques diretos
+                          </span>
                         </div>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                {/* RODAPÉ DO CARD DUPLO COM AVISO DE PERDA E CARIMBO ESSMENDES */}
-                <div className="relative z-10 border-t border-slate-800 pt-6 flex items-center justify-between">
+                {/* 3. RODAPÉ EXECUTIVO COM NOTA DE AUDITORIA & CARIMBO ESSMENDES */}
+                <div className="relative z-10 border-t border-slate-800 pt-5 flex items-center justify-between">
                   <div className="max-w-xl">
-                    <p className="text-xs font-semibold text-amber-300 flex items-center gap-1.5">
-                      <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-                      Estimativa de Perda: Até 70% dos clientes que buscam no Google Maps
-                      fecham com quem possui mais avaliações e agendamento direto.
+                    <p className="text-xs font-semibold text-slate-300 flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0" />
+                      <span>
+                        Auditoria técnica de visibilidade local via Google Places API • Relatório executivo para tomada de decisão.
+                      </span>
                     </p>
                   </div>
 
-                  <div className="text-right">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-lg bg-purple-950 border border-purple-700/60">
-                      <ShieldCheck className="w-4 h-4 text-purple-400" />
-                      <span className="text-xs font-black text-white tracking-wide">
-                        EssMendes Tecnologia
-                      </span>
-                    </div>
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 shadow-md">
+                    <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="text-xs font-black text-white tracking-wide">
+                      EssMendes Tecnologia
+                    </span>
                   </div>
                 </div>
               </div>
@@ -734,19 +782,18 @@ export function ComparisonCardExport({
       )}
 
       {/* ========================================================================= */}
-      {/* ABA 2: RAIO-X INDIVIDUAL DO PROSPECT (1080x1080)                          */}
+      {/* ABA 2: RAIO-X INDIVIDUAL 1080x1080 (SNAPSHOT DO PROSPECT)                 */}
       {/* ========================================================================= */}
       {activeTab === "single" && (
         <div className="w-full flex flex-col items-center space-y-3">
-          {/* BARRA DE BOTÕES DO RAIO-X INDIVIDUAL */}
-          <div className="flex flex-wrap items-center justify-between gap-2 w-full bg-[#14151f] p-3 rounded-xl border border-slate-800">
+          {/* BARRA DE BOTÕES DE EXPORTAÇÃO */}
+          <div className="flex flex-wrap items-center justify-between gap-2 w-full bg-[#101422] p-3 rounded-xl border border-slate-800">
             <div className="text-xs text-slate-300 font-medium flex items-center gap-1.5">
               <FileText className="w-3.5 h-3.5 text-purple-400" />
-              <span>Asset B: 1080x1080 Raio-X Individual</span>
+              <span>Snapshot Individual 1080x1080</span>
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
-              {/* BOTÃO PRIMÁRIO: COPIAR IMAGEM + MENSAGEM */}
               <button
                 type="button"
                 onClick={() => handleCopyUnified(singleCardRef.current, false)}
@@ -758,25 +805,24 @@ export function ComparisonCardExport({
                     ? "bg-purple-900/50 text-purple-300 cursor-not-allowed opacity-80"
                     : "bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white active:scale-95 shadow-purple-600/30"
                 }`}
-                title="Copiar Imagem e preparar proposta para colar no WhatsApp"
+                title="Copiar Imagem e preparar abordagem para colar no WhatsApp"
               >
                 {copyingSingle || isImageLoading ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
                 ) : copiedUnifiedSingle ? (
                   <Check className="w-3.5 h-3.5" />
                 ) : (
-                  <Sparkles className="w-3.5 h-3.5 text-purple-200" />
+                  <Copy className="w-3.5 h-3.5 text-purple-200" />
                 )}
                 <span>
                   {copiedUnifiedSingle
                     ? "Imagem Copiada!"
                     : isImageLoading
-                    ? "Carregando Fotos..."
-                    : "Copiar Imagem + Mensagem"}
+                    ? "Processando..."
+                    : "Copiar Imagem (Ctrl+V)"}
                 </span>
               </button>
 
-              {/* BOTÃO SECUNDÁRIO: COPIAR SOMENTE TEXTO */}
               <button
                 type="button"
                 onClick={() => handleCopyTextOnly(false)}
@@ -785,17 +831,16 @@ export function ComparisonCardExport({
                     ? "bg-emerald-800/80 text-white border-emerald-500"
                     : "bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700"
                 }`}
-                title="Copiar apenas o texto do script comercial para a legenda"
+                title="Copiar o script comercial curto de curiosidade"
               >
                 {copiedTextSingle ? (
                   <Check className="w-3.5 h-3.5 text-emerald-300" />
                 ) : (
-                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  <MessageSquare className="w-3.5 h-3.5 text-slate-400" />
                 )}
-                <span>{copiedTextSingle ? "Texto Copiado!" : "Copiar Somente Texto"}</span>
+                <span>{copiedTextSingle ? "Script Copiado!" : "Copiar Script"}</span>
               </button>
 
-              {/* BOTÃO TERCIÁRIO: BAIXAR PNG */}
               <button
                 type="button"
                 onClick={() => handleDownload(singleCardRef.current, false)}
@@ -818,7 +863,7 @@ export function ComparisonCardExport({
           </div>
 
           {/* PREVIEW CONTAINER RESPONSIVO (SCALE 0.38) */}
-          <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#07080b] p-2 flex justify-center shadow-2xl">
+          <div className="w-full overflow-hidden rounded-2xl border border-slate-800 bg-[#06080e] p-2 flex justify-center shadow-2xl">
             <div
               style={{
                 transform: "scale(0.38)",
@@ -829,38 +874,37 @@ export function ComparisonCardExport({
               }}
               className="shrink-0"
             >
-              {/* O NÓ REAL 1080x1080 - RAIO-X INDIVIDUAL */}
+              {/* O NÓ REAL 1080x1080 - DIAGNÓSTICO INDIVIDUAL */}
               <div
                 ref={singleCardRef}
-                key={`export-card-${target.place_id}-${leader.place_id}`}
+                key={`export-card-single-${target.place_id}`}
                 style={{
                   width: "1080px",
                   height: "1080px",
-                  backgroundColor: "#0b0c10",
+                  backgroundColor: "#080b11",
                   backgroundImage:
-                    "radial-gradient(circle at 50% 10%, #201a45 0%, #0b0c10 75%)",
+                    "radial-gradient(circle at 50% 10%, #171d33 0%, #080b11 75%)",
                 }}
-                className="relative flex flex-col justify-between p-12 text-white select-none box-border border-4 border-indigo-500/30 shadow-2xl"
+                className="relative flex flex-col justify-between p-11 text-white select-none box-border border-2 border-indigo-500/40 shadow-2xl overflow-hidden font-sans"
               >
                 {/* CABEÇALHO COM A FOTO E ENDEREÇO DA EMPRESA */}
-                <div className="relative z-10 border-b border-slate-800 pb-6 space-y-4">
+                <div className="relative z-10 border-b border-slate-800 pb-5 space-y-3.5">
                   <div className="flex items-center justify-between">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/15 border border-purple-500/40 text-purple-300 text-xs font-black uppercase tracking-widest">
-                      <ShieldCheck className="w-4 h-4 text-purple-400" />
-                      AUDITORIA DIGITAL INDIVIDUAL
+                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-900 border border-slate-700/80">
+                      <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                      <span className="text-[11px] font-black uppercase tracking-widest text-slate-300">
+                        AUDITORIA DE PRESENÇA LOCAL &amp; GOOGLE MAPS
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900 px-3 py-1 rounded-lg border border-slate-800">
-                      <MapPin className="w-3.5 h-3.5 text-purple-400" />
+                    <div className="flex items-center gap-2 text-xs text-slate-300 bg-slate-900 px-3 py-1 rounded-full border border-slate-800">
+                      <MapPin className="w-3.5 h-3.5 text-indigo-400" />
                       <span>{city}</span>
                     </div>
                   </div>
 
-                  {/* Banner / Foto de Fachada com Badge do Google Maps */}
-                  <div
-                    key={`container-single-target-${target.place_id || target.name}-${targetPhoto}`}
-                    className="relative w-full h-56 rounded-3xl overflow-hidden bg-slate-900 border-2 border-slate-700 shadow-xl"
-                  >
+                  {/* Banner / Foto de Fachada com Selo de Auditoria */}
+                  <div className="relative w-full h-52 rounded-3xl overflow-hidden bg-slate-900 border-2 border-slate-700 shadow-xl">
                     {isTargetLoading ? (
                       <div className="w-full h-full flex flex-col items-center justify-center text-slate-500 space-y-2">
                         <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
@@ -869,17 +913,15 @@ export function ComparisonCardExport({
                     ) : (
                       // eslint-disable-next-line @next/next/no-img-element
                       <img
-                        key={`single-target-${target.place_id || target.name}-${targetPhoto}`}
                         src={targetBase64 || "/placeholder-store.svg"}
                         alt={target.name}
                         className="w-full h-full object-cover"
                       />
                     )}
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0b0c10] via-transparent to-transparent pointer-events-none" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#080b11] via-transparent to-transparent pointer-events-none" />
 
-                    {/* Selo do Google Maps no Topo da Imagem */}
-                    <div className="absolute top-4 right-4 bg-[#14151f]/90 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-700 flex items-center gap-2 shadow-lg z-20">
-                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-ping" />
+                    <div className="absolute top-4 right-4 bg-[#0e1422]/90 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-slate-700 flex items-center gap-2 shadow-lg z-20">
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
                       <span className="text-xs font-black text-white">Google Maps Audit</span>
                     </div>
                   </div>
@@ -891,18 +933,18 @@ export function ComparisonCardExport({
                     </h1>
                     <p className="text-sm text-slate-400 mt-1 flex items-center gap-1.5">
                       <MapPin className="w-4 h-4 text-slate-500 shrink-0" />
-                      <span>{target.formatted_address || "Endereço registrado na região"}</span>
+                      <span>{target.formatted_address || "Endereço verificado no Google"}</span>
                     </p>
                   </div>
                 </div>
 
-                {/* DIAGNÓSTICO RÁPIDO EM 3 CARDS DE ALTO IMPACTO */}
+                {/* DIAGNÓSTICO EM 3 CARDS EXECUTIVOS */}
                 <div className="relative z-10 grid grid-cols-3 gap-6 my-auto">
-                  {/* Card 1: Nota vs Média da Cidade */}
-                  <div className="bg-[#14151f] p-6 rounded-3xl border-2 border-slate-800 shadow-xl flex flex-col justify-between">
+                  {/* Card 1: Avaliações & Reputação */}
+                  <div className="bg-[#0f1422] p-6 rounded-3xl border-2 border-slate-800 shadow-xl flex flex-col justify-between">
                     <div>
                       <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
-                        Reputação vs Cidade
+                        Reputação no Google
                       </span>
                       <div className="flex items-baseline gap-2 mt-2">
                         <span className="text-4xl font-black text-amber-400">
@@ -912,9 +954,9 @@ export function ComparisonCardExport({
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400 space-y-1">
+                    <div className="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-300 space-y-1">
                       <div>
-                        Média da Cidade: <strong className="text-white">{cityAvgRating} ★</strong>
+                        Volume: <strong className="text-white">{target.user_ratings_total} reviews</strong>
                       </div>
                       <div
                         className={`font-bold ${
@@ -928,26 +970,23 @@ export function ComparisonCardExport({
                     </div>
                   </div>
 
-                  {/* Card 2: Review Gap (Déficit vs Líder) */}
-                  <div className="bg-[#14151f] p-6 rounded-3xl border-2 border-amber-600/40 shadow-xl flex flex-col justify-between">
+                  {/* Card 2: Gap vs Líder */}
+                  <div className="bg-[#0f1422] p-6 rounded-3xl border-2 border-amber-600/40 shadow-xl flex flex-col justify-between">
                     <div>
                       <span className="text-[11px] font-black uppercase tracking-wider text-amber-400">
-                        Volume &amp; Gap de Reviews
+                        Déficit vs Líder
                       </span>
                       <div className="flex items-baseline gap-2 mt-2">
                         <span className="text-4xl font-black text-white">
                           {target.user_ratings_total}
                         </span>
-                        <span className="text-sm text-slate-400">avaliações</span>
+                        <span className="text-sm text-slate-400">vs {leader.user_ratings_total}</span>
                       </div>
                     </div>
 
-                    <div className="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-400 space-y-1">
+                    <div className="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-300 space-y-1">
                       <div>
-                        Líder Local:{" "}
-                        <strong className="text-emerald-400">
-                          {leader.user_ratings_total} reviews
-                        </strong>
+                        Líder: <strong className="text-emerald-400">{leader.name}</strong>
                       </div>
                       <div className="font-bold text-amber-300">
                         {isTargetTheLeader
@@ -957,50 +996,32 @@ export function ComparisonCardExport({
                     </div>
                   </div>
 
-                  {/* Card 3: Missing Website Alert */}
-                  <div
-                    className={`p-6 rounded-3xl border-2 shadow-xl flex flex-col justify-between ${
-                      target.has_website
-                        ? "bg-[#14151f] border-slate-800"
-                        : "bg-red-950/60 border-red-600"
-                    }`}
-                  >
+                  {/* Card 3: Impacto Comercial (Contatos Perdidos) */}
+                  <div className="bg-[#0f1422] p-6 rounded-3xl border-2 border-rose-500/40 shadow-xl flex flex-col justify-between">
                     <div>
-                      <span
-                        className={`text-[11px] font-black uppercase tracking-wider ${
-                          target.has_website ? "text-slate-400" : "text-red-400"
-                        }`}
-                      >
-                        {target.has_website ? "Canal Digital" : "Alerta Crítico"}
+                      <span className="text-[11px] font-black uppercase tracking-wider text-rose-300">
+                        Contatos Perdidos
                       </span>
-                      <div className="text-xl font-black text-white mt-2 leading-tight">
-                        {target.has_website
-                          ? "Website Ativo"
-                          : "🚨 Sem Website Cadastrado"}
+                      <div className="text-3xl font-black text-rose-400 mt-2 leading-tight">
+                        {isTargetTheLeader ? "0 / mês" : `~${lostContactsPerMonth}`}
                       </div>
+                      <span className="text-xs text-rose-300/80">clientes / mês</span>
                     </div>
 
                     <div className="mt-4 pt-3 border-t border-slate-800 text-xs text-slate-300">
-                      {target.has_website ? (
-                        <span>Canal de agendamento registrado no Google Meu Negócio.</span>
-                      ) : (
-                        <span className="text-red-200 font-bold">
-                          Perda imediata de leads para quem tem link de reserva e WhatsApp.
-                        </span>
-                      )}
+                      <span>Estimativa de clientes que optam por concorrentes com maior prova social.</span>
                     </div>
                   </div>
                 </div>
 
-                {/* RODAPÉ DO RAIO-X */}
-                <div className="relative z-10 border-t border-slate-800 pt-6 flex items-center justify-between">
-                  <div className="text-xs text-slate-400 max-w-md">
-                    Relatório confidencial de inteligência competitiva gerado para suporte em
-                    expansão de vendas e posicionamento local.
+                {/* RODAPÉ DO RAIO-X INDIVIDUAL */}
+                <div className="relative z-10 border-t border-slate-800 pt-5 flex items-center justify-between">
+                  <div className="text-xs text-slate-300 max-w-md">
+                    Auditoria executiva confidencial gerada para apoio em expansão comercial e autoridade no Google.
                   </div>
 
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-purple-950/90 border border-purple-700/60 shadow-lg">
-                    <ShieldCheck className="w-4 h-4 text-purple-400" />
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700/80 shadow-lg">
+                    <ShieldCheck className="w-4 h-4 text-indigo-400" />
                     <span className="text-xs font-black text-white tracking-wide">
                       EssMendes Tecnologia
                     </span>

@@ -846,6 +846,7 @@ export default function ComparativoPage() {
                   </div>
 
                   <button
+                    type="button"
                     onClick={handleCopyPitch}
                     className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-sm ${
                       pitchCopied
@@ -871,7 +872,7 @@ export default function ComparativoPage() {
                   <textarea
                     readOnly
                     value={dynamicSalesPitch}
-                    rows={12}
+                    rows={7}
                     className="w-full bg-[#0b0c10] border border-slate-700/80 rounded-xl p-3 text-xs text-slate-200 font-mono leading-relaxed resize-none focus:outline-none"
                   />
                 </div>
